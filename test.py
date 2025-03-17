@@ -31,7 +31,7 @@ image_resized = cv2.resize(image, (0, 0), fx=scale, fy=scale)
 image_color_resized = cv2.resize(image_color, (0, 0), fx=scale, fy=scale)
 
 cv2.imshow("Thresh", thresh_resized)
-cv2.imshow("Characters Only", image_resized)
+cv2.imshow("Base", image_resized)
 cv2.imshow("Contours", image_color_resized)
 
 # Draw rectangle for each contour
