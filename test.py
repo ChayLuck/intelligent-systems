@@ -11,22 +11,22 @@ output_folder = "extracted_letters"
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
 
-image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE) #Black and white image (gray)
 
 if image is None:
-    raise FileNotFoundError(f"Görsel yüklenemedi. Dosya yolu yanlış veya dosya bozuk: {image_path}")
+    raise FileNotFoundError(f"Image couldnt uploaded. Wrong path or corrupted file: {image_path}")
 
-# Görüntüyü ters çevir (Beyaz karakterler - Siyah arka plan)
-_, thresh = cv2.threshold(image, 115, 255, cv2.THRESH_BINARY_INV)
+# Reverse colors (White characters - Black background)
+_, thresh = cv2.threshold(image, 115, 255, cv2.THRESH_BINARY_INV) #threshold makes the image binary and 115 is the value determines the breakpoint
 
-contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) #find the edges of image, tree is hierarchy, chain is memory upgrade 
 
-image_color = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+image_color = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) #Converts the image to color back again
 
-cv2.drawContours(image_color, contours, -1, (0, 255, 0), 2)
+cv2.drawContours(image_color, contours, -1, (0, 255, 0), 2) #-1 mean full, middle is color green, 2 is thickness
 
-scale = 0.22  # Görüntüyü %50 küçültme
-thresh_resized = cv2.resize(thresh, (0, 0), fx=scale, fy=scale)
+scale = 0.22  # Scaling the image for better view
+thresh_resized = cv2.resize(thresh, (0, 0), fx=scale, fy=scale) #fx width, fy height
 image_resized = cv2.resize(image, (0, 0), fx=scale, fy=scale)
 image_color_resized = cv2.resize(image_color, (0, 0), fx=scale, fy=scale)
 
@@ -34,27 +34,29 @@ cv2.imshow("Thresh", thresh_resized)
 cv2.imshow("Characters Only", image_resized)
 cv2.imshow("Contours", image_color_resized)
 
-# Bounding box'ları sırala (Önce satır bazlı, sonra sütun bazlı)
+# Draw rectangle for each contour
 boxes = [cv2.boundingRect(c) for c in contours]
-boxes = sorted(boxes, key=lambda x: (x[1], x[0]))  # Önce satır bazlı, sonra sütun bazlı sıralama
+boxes = sorted(boxes, key=lambda x: (x[1], x[0]))  #First rows, then collumns
 
 char_index = 1
 
-
+#start to extract the characters for each characters
 for x, y, w, h in boxes:
-    roi = image[y:y + h, x:x + w]
+    roi = image[y:y + h, x:x + w] #Region of interest when detect a character it cuts it from the image
 
-    # OCR kullanarak karakteri oku
-    char = pytesseract.image_to_string(roi, config='--psm 10').strip()
+    # Reads the characters using OCR (Optic Character Recognition)
+    char = pytesseract.image_to_string(roi, config='--psm 10').strip() #psm 10 is for single character
 
-    # Eğer karakter boşsa veya alfanumerik değilse kaydetme
+    # If character is empty or non-alphanumeric, skip
     if not char or not char.isalnum():
         print(f"Atlandı: ({x}, {y}, {w}, {h}) -> '{char}'")
         continue
 
+    #save the characters image to the folder
     char_filename = f"{output_folder}/char_{char_index}.png"
     cv2.imwrite(char_filename, roi)
 
+    #Let the user know which character is saved
     print(f"Karakter '{char}' kaydedildi: {char_filename}")
 
     char_index += 1 
