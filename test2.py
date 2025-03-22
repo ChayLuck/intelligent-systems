@@ -4,10 +4,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import pytesseract
 
-def analyze_letters(image_folder, output_csv, grid_size=3, visualize=False):
+def analyze_letters(image_folder, output_csv, grid_size=3, visualize=False, 
+                   recognize_letters=True, valid_letters="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"):
     """
     Analyze letter images by dividing them into a grid and calculating pixel statistics.
+    Optionally recognize the letter using OCR.
     
     Parameters:
     -----------
@@ -19,12 +22,24 @@ def analyze_letters(image_folder, output_csv, grid_size=3, visualize=False):
         Size of the grid (grid_size x grid_size)
     visualize : bool
         Whether to visualize the grid division for each image
+    recognize_letters : bool
+        Whether to use OCR to identify letters
+    valid_letters : str
+        String of valid characters to recognize
     """
+    # Check if letter recognition is requested but not available
+    if recognize_letters and not TESSERACT_AVAILABLE:
+        recognize_letters = False
+        print("Letter recognition disabled due to missing pytesseract.")
+    
     # Ensure the output directory exists
     os.makedirs(os.path.dirname(output_csv) if os.path.dirname(output_csv) else '.', exist_ok=True)
     
     # Create column headers
     column_names = ["Image"]
+    if recognize_letters:
+        column_names.append("Letter")
+        
     for row in range(grid_size):
         for col in range(grid_size):
             column_names.append(f"Black_{row}_{col}")
@@ -59,6 +74,26 @@ def analyze_letters(image_folder, output_csv, grid_size=3, visualize=False):
             print(f"Error: Could not load {image_name}. Skipping...")
             continue
 
+        # Initialize data for this image
+        row_data = [image_name]
+        
+        # Recognize letter if enabled
+        if recognize_letters:
+            try:
+                # Configure pytesseract for single character recognition with whitelist
+                config = f"--psm 10 -c tessedit_char_whitelist={valid_letters}"
+                letter = pytesseract.image_to_string(image, config=config).strip()
+                
+                # Validate the letter
+                if len(letter) == 1 and letter in valid_letters:
+                    row_data.append(letter)
+                else:
+                    print(f"Warning: {image_name} - Recognized '{letter}' not in valid letters.")
+                    row_data.append(None)
+            except Exception as e:
+                print(f"OCR error for {image_name}: {e}")
+                row_data.append(None)
+        
         # Preprocessing: Apply Gaussian blur to reduce noise (optional)
         # image = cv2.GaussianBlur(image, (5, 5), 0)
         
@@ -69,14 +104,16 @@ def analyze_letters(image_folder, output_csv, grid_size=3, visualize=False):
         h, w = binary_image.shape
         cell_h, cell_w = h // grid_size, w // grid_size
 
-        # Initialize data for this image
-        row_data = [image_name]
         total_black_pixels = 0
         total_white_pixels = 0
 
         # Create visualization if enabled
         if visualize:
             vis_img = cv2.cvtColor(binary_image.copy(), cv2.COLOR_GRAY2BGR)
+            # Add recognized letter to visualization if available
+            if recognize_letters and row_data[-1]:
+                cv2.putText(vis_img, f"Letter: {row_data[-1]}", (10, 30), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
         # Process each cell in the grid
         for row in range(grid_size):
@@ -153,6 +190,10 @@ def main():
     """
     Main function to run the letter analysis tool
     """
+    print("=" * 50)
+    print("Letter Image Grid Analysis Tool")
+    print("=" * 50)
+    
     # Get user input for parameters
     image_folder = "extracted_letters"
     if not os.path.exists(image_folder):
@@ -171,8 +212,32 @@ def main():
     
     visualize = input("Visualize grid division? (y/n): ").strip().lower() == 'y'
     
+    # OCR options
+    recognize_letters = False
+    if TESSERACT_AVAILABLE:
+        recognize_letters = input("Use OCR to recognize letters? (y/n): ").strip().lower() == 'y'
+        if recognize_letters:
+            valid_letters = input("Enter valid letters to recognize (default: a-zA-Z): ").strip()
+            if not valid_letters:
+                valid_letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        else:
+            valid_letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    else:
+        valid_letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    
+    # Check if tesseract path needs to be set
+    if recognize_letters:
+            pytesseract.pytesseract.tesseract_cmd = 'C:\Program Files\Tesseract-OCR\\tesseract.exe'
+    
     # Run the analysis
-    result_df = analyze_letters(image_folder, output_csv, grid_size, visualize)
+    result_df = analyze_letters(
+        image_folder, 
+        output_csv, 
+        grid_size, 
+        visualize, 
+        recognize_letters, 
+        valid_letters
+    )
     
     # Show a sample of the results
     print("\nSample of analysis results:")
@@ -192,10 +257,14 @@ def main():
             # Create a pivot table for visualization
             heatmap_data = []
             for idx, row in subset.iterrows():
+                image_name = row['Image']
+                letter = row.get('Letter', 'Unknown')
+                title = f"{image_name} ({letter})" if letter else image_name
+                
                 for col in density_cols:
                     _, r, c = col.split('_')
                     heatmap_data.append({
-                        'Image': row['Image'],
+                        'Image': title,
                         'Row': int(r),
                         'Col': int(c),
                         'Density': row[col]
@@ -206,6 +275,8 @@ def main():
             
             plt.figure(figsize=(15, 8))
             for i, img in enumerate(pivot_table.index.get_level_values(0).unique()):
+                if i >= 10:  # Limit to 10 images
+                    break
                 plt.subplot(2, 5, i+1)
                 img_data = pivot_table.loc[img]
                 plt.imshow(img_data, cmap='Blues', interpolation='nearest')
@@ -215,9 +286,10 @@ def main():
                 plt.yticks(range(grid_size))
             
             plt.tight_layout()
-            plt.savefig('feature_visualization.png')
+            vis_filename = os.path.splitext(output_csv)[0] + "_visualization.png"
+            plt.savefig(vis_filename)
             plt.show()
-            print("Feature visualization saved as 'feature_visualization.png'")
+            print(f"Feature visualization saved as '{vis_filename}'")
         except Exception as e:
             print(f"Could not generate visualization: {e}")
     
