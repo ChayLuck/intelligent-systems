@@ -159,4 +159,4 @@ print(f"Analysis complete! Results saved to {output_csv}")
 
 # Show a sample of the results
 print("\nSample of analysis results:")
-print(df.head())
+print(df)
