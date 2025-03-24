@@ -5,21 +5,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-# Basic configuration
 image_folder = "extracted_letters"
 output_csv = "output.csv"
-grid_size = 3  # Default grid size
-visualize = False  # Default visualization setting
-
-# Get user input for parameters
-print("=" * 50)
-print("Letter Image Grid Analysis Tool")
-print("=" * 50)
+grid_size = 3  # Default 
+visualize = False  # Default 
 
 if not os.path.exists(image_folder):
     print(f"Error: Folder '{image_folder}' does not exist!")
     exit()
 
+# Get user input for parameters
 try:
     grid_size = int(input("Enter grid size (e.g., 3 for 3x3, 4 for 4x4): ").strip() or "3")
     if grid_size <= 0:
@@ -28,6 +23,7 @@ except ValueError:
     print("Invalid grid size. Using default (3x3).")
     grid_size = 3
 
+# Ask user if they want to visualize the grid division (if y it will return true)
 visualize = input("Visualize grid division? (y/n): ").strip().lower() == 'y'
 
 # Ensure the output directory exists
@@ -43,7 +39,7 @@ for row in range(grid_size):
         column_names.append(f"Black_Density_{row}_{col}")
         column_names.append(f"White_Density_{row}_{col}")
 
-# Add global statistics columns
+# Global statistics
 column_names.extend([
     "Total_Black_Pixels", 
     "Total_White_Pixels",
@@ -57,7 +53,7 @@ column_names.extend([
 # Results list
 results = []
 
-# Get list of image files
+# Get all photos in image folder
 image_files = [f for f in os.listdir(image_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff'))]
 
 # Process each image with a progress bar
@@ -73,7 +69,7 @@ for image_name in tqdm(image_files, desc="Processing images"):
     # Initialize data for this image
     row_data = [image_name]
     
-    # Convert to binary using Otsu's method for adaptive thresholding
+    # Convert to binary (black and white) using Otsu's method (turning invert after)
     _, binary_image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     
     # Get image dimensions
@@ -103,7 +99,7 @@ for image_name in tqdm(image_files, desc="Processing images"):
             if visualize:
                 cv2.rectangle(vis_img, (left, top), (right, bottom), (0, 255, 0), 1)
             
-            # Count pixels (in binary_inv, white pixels are the foreground/black parts of the letter)
+            # Count pixels 
             black_pixels = np.count_nonzero(cell == 255)  
             white_pixels = np.count_nonzero(cell == 0)
             total_pixels = cell.size
@@ -151,7 +147,7 @@ for image_name in tqdm(image_files, desc="Processing images"):
         plt.tight_layout()
         plt.show()
 
-# Convert to DataFrame and save to CSV
+# Convert to Pandas DataFrame and save to CSV
 df = pd.DataFrame(results, columns=column_names)
 df.to_csv(output_csv, index=False, float_format="%.4f")
 
