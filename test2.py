@@ -5,8 +5,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-image_folder = "extracted_letters"
-output_csv = "output.csv"
+image_folder = "upper"
+output_csv = "big_output10.csv"
 grid_size = 3  # Default 
 visualize = False  # Default 
 
@@ -30,7 +30,7 @@ visualize = input("Visualize grid division? (y/n): ").strip().lower() == 'y'
 os.makedirs(os.path.dirname(output_csv) if os.path.dirname(output_csv) else '.', exist_ok=True)
 
 # Create column headers
-column_names = ["Image"]
+column_names = ["Image","Letters"]  
     
 for row in range(grid_size):
     for col in range(grid_size):
@@ -66,8 +66,13 @@ for image_name in tqdm(image_files, desc="Processing images"):
         print(f"Error: Could not load {image_name}. Skipping...")
         continue
 
+    # This part for detecting the letter in png path
+    name, ext = os.path.splitext(image_name)
+    parts = name.split("_")
+    real_letter_name = parts[-2] if parts[-2].isalpha() else None
+
     # Initialize data for this image
-    row_data = [image_name]
+    row_data = [image_name, real_letter_name]
     
     # Convert to binary (black and white) using Otsu's method (turning invert after)
     _, binary_image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
