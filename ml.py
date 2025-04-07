@@ -14,16 +14,17 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
-# Veri yükleme ve ön işleme
-df = pd.read_csv('big_output5.csv')
+# Take the csv and split it into X and y
+df = pd.read_csv('big_output10.csv')
 X = df.drop(columns=["Image", "Letters"]).values
 y = df["Letters"].values
 
+# Turn lettters into numbers and classes save the letters
 le = LabelEncoder()
 y = le.fit_transform(y)
 classes = le.classes_
 
-# Modeller
+# Models
 models = {
     "RandomForest": RandomForestClassifier(),
     "GradientBoosting": GradientBoostingClassifier(),
@@ -35,11 +36,11 @@ models = {
     "RidgeClassifier": RidgeClassifier(),
     "Perceptron": Perceptron()
 }
-
+# Split the data into 10 folds and shuffle it with a random state
 kf = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
 all_results = []
 
-# Helper: Katman bazında doğruluk hesaplama
+# Helper: Katman bazında doğruluk hesaplama / Per-class accuracy calculation for letters
 def per_class_accuracy(y_true, y_pred, classes):
     result = {}
     for i, label in enumerate(classes):
@@ -50,7 +51,7 @@ def per_class_accuracy(y_true, y_pred, classes):
             result[label] = round(np.mean(y_pred[mask] == i), 4)
     return result
 
-# Sklearn modelleri için eğitim ve değerlendirme
+# Training and evaluation for sklearn models
 for name, model in models.items():
     for fold, (train_idx, test_idx) in enumerate(kf.split(X, y)):
         model.fit(X[train_idx], y[train_idx])
@@ -61,7 +62,7 @@ for name, model in models.items():
         row.update(per_class_accuracy(y[test_idx], preds, classes))
         all_results.append(row)
 
-# PyTorch modeli
+# PyTorch modeli (Simple neural network with 128 neurons)
 class SimpleNN(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(SimpleNN, self).__init__()
@@ -74,7 +75,7 @@ class SimpleNN(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-# PyTorch ile eğitim ve test
+# Training and evaluation with PyTorch
 for fold, (train_idx, test_idx) in enumerate(kf.split(X, y)):
     model = SimpleNN(X.shape[1], len(classes))
     criterion = nn.CrossEntropyLoss()
@@ -105,7 +106,7 @@ for fold, (train_idx, test_idx) in enumerate(kf.split(X, y)):
         row.update(per_class_accuracy(y[test_idx], preds, classes))
         all_results.append(row)
 
-# Ortalama değerleri hesapla
+# Calculate average values of each model in 10 folds
 results_df = pd.DataFrame(all_results)
 avg_rows = []
 
@@ -118,6 +119,6 @@ for model_name in results_df["Model"].unique():
 
 results_df = pd.concat([results_df, pd.DataFrame(avg_rows)], ignore_index=True)
 
-# Kaydet
-results_df.to_csv("full_model_report5.csv", index=False)
-print("CSV oluşturuldu: full_model_report5.csv")
+# Save
+results_df.to_csv("full_model_report10.csv", index=False)
+print("CSV oluşturuldu: full_model_report10.csv")
