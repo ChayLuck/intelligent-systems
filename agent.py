@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 import random
+from sklearn.metrics import accuracy_score
+import csv
 
 # ========== QLearning Agent ================
 class QLearningAgent:
@@ -65,3 +67,53 @@ for epoch in range(epochs):
         total_reward += reward
 
     print(f"Epoch {epoch+1}/{epochs} | Total reward: {total_reward}")
+
+
+
+
+#///////////////////////////////////////////
+from sklearn.metrics import accuracy_score
+import csv
+
+# Tüm tahminleri ve gerçek etiketleri topla
+true_labels = []
+agent_preds = []
+
+for i in range(len(X)):
+    state = np.array(X[i], dtype=np.float32)
+    true_label = y[i]
+    action = agent.act(state)
+    predicted_label = le_letters.inverse_transform([action])[0]
+
+    true_labels.append(true_label)
+    agent_preds.append(predicted_label)
+
+# Genel doğruluk
+overall_accuracy = accuracy_score(true_labels, agent_preds)
+print(f"\nOverall Accuracy: {overall_accuracy:.4f}")
+
+# Harf bazlı doğruluk hesapla
+unique_labels = sorted(set(true_labels))
+letter_accuracies = {}
+
+for letter in unique_labels:
+    indices = [i for i, l in enumerate(true_labels) if l == letter]
+    correct = sum(1 for i in indices if agent_preds[i] == true_labels[i])
+    letter_accuracy = correct / len(indices)
+    letter_accuracies[letter] = letter_accuracy
+    print(f"Accuracy for '{letter}': {letter_accuracy:.4f}")
+
+# CSV'ye yaz
+with open("agent_accuracy_results.csv", mode="w", newline="") as file:
+    writer = csv.writer(file)
+    writer.writerow(["Letter", "Accuracy"])
+    for letter, acc in letter_accuracies.items():
+        writer.writerow([letter, acc])
+    writer.writerow([])
+    writer.writerow(["Overall Accuracy", overall_accuracy])
+
+print("\nAccuracy results saved to 'agent_accuracy_results.csv'")
+
+
+
+    
