@@ -4,8 +4,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import random
+import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, confusion_matrix
+import seaborn as sns
 
 # ====== Parameters ======
 EPOCHS = 100
@@ -17,7 +19,7 @@ EPSILON_DECAY = 0.65
 LR = 0.001
 
 # ====== Dataset Preparation ======
-df = pd.read_csv("extended_big_output_cv5.csv")
+df = pd.read_csv("extended_big_output_cv6.csv")
 df = df.drop(columns=["Image"])
 
 le_letters = LabelEncoder()
@@ -65,6 +67,14 @@ optimizer = optim.Adam(model.parameters(), lr=LR)
 criterion = nn.MSELoss()
 epsilon = EPSILON_START
 
+# ====== Tracking metrics for visualization ======
+history = {
+    'epoch': [],
+    'loss': [],
+    'reward': [],
+    'epsilon': []
+}
+
 # ====== Training ======
 for epoch in range(EPOCHS):
     indices = torch.randperm(X.size(0))
@@ -106,6 +116,12 @@ for epoch in range(EPOCHS):
 
     epsilon = max(EPSILON_END, epsilon * EPSILON_DECAY)
     print(f"Epoch {epoch+1}/{EPOCHS} - Loss: {total_loss:.4f} - Total Reward: {total_reward}")
+    
+    # Store metrics for visualization
+    history['epoch'].append(epoch + 1)
+    history['loss'].append(total_loss)
+    history['reward'].append(total_reward)
+    history['epsilon'].append(epsilon)
 
 # ====== Evaluation ======
 model.eval()
@@ -122,7 +138,6 @@ with torch.no_grad():
 acc = accuracy_score(true_labels, preds)
 print(f"\nFinal Accuracy of Improved DQN Agent: {acc:.4f}")
 
-
 # Optional: Letter-wise Accuracy
 letter_acc = {}
 true_labels = np.array(true_labels)
@@ -135,3 +150,105 @@ for label in np.unique(true_labels):
 print("\nLetter-wise Accuracies:")
 for letter, acc in sorted(letter_acc.items()):
     print(f"{letter}: {acc:.4f}")
+
+# ====== Visualizations ======
+plt.style.use('ggplot')
+
+# 1. Training metrics over epochs
+fig, axes = plt.subplots(3, 1, figsize=(12, 15))
+
+# Plot loss
+axes[0].plot(history['epoch'], history['loss'], 'b-')
+axes[0].set_title('Loss Over Training', fontsize=14)
+axes[0].set_xlabel('Epoch')
+axes[0].set_ylabel('Loss')
+axes[0].grid(True)
+
+# Plot reward
+axes[1].plot(history['epoch'], history['reward'], 'g-')
+axes[1].set_title('Total Reward Over Training', fontsize=14)
+axes[1].set_xlabel('Epoch')
+axes[1].set_ylabel('Total Reward')
+axes[1].grid(True)
+
+# Plot epsilon decay
+axes[2].plot(history['epoch'], history['epsilon'], 'r-')
+axes[2].set_title('Epsilon Decay Over Training', fontsize=14)
+axes[2].set_xlabel('Epoch')
+axes[2].set_ylabel('Epsilon')
+axes[2].grid(True)
+
+plt.tight_layout()
+plt.savefig('training_metrics.png')
+plt.close()
+
+# 2. Letter-wise accuracy visualization
+letters = list(letter_acc.keys())
+accs = list(letter_acc.values())
+
+plt.figure(figsize=(12, 8))
+bars = plt.bar(letters, accs, color='skyblue')
+plt.axhline(y=acc, color='r', linestyle='-', label=f'Overall Accuracy: {acc:.4f}')
+plt.title('Letter-wise Recognition Accuracy', fontsize=16)
+plt.xlabel('Letters')
+plt.ylabel('Accuracy')
+plt.xticks(rotation=45)
+plt.ylim(0, 1.1)
+
+# Add accuracy values on top of bars
+for bar in bars:
+    height = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+             f'{height:.2f}', ha='center', va='bottom', rotation=0)
+
+plt.legend()
+plt.tight_layout()
+plt.savefig('letter_accuracy.png')
+plt.close()
+
+# 3. Confusion Matrix
+cm = confusion_matrix(true_labels, preds)
+plt.figure(figsize=(14, 12))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+            xticklabels=le_letters.inverse_transform(np.unique(true_labels)),
+            yticklabels=le_letters.inverse_transform(np.unique(true_labels)))
+plt.title('Confusion Matrix', fontsize=16)
+plt.xlabel('Predicted Label')
+plt.ylabel('True Label')
+plt.tight_layout()
+plt.savefig('confusion_matrix.png')
+plt.close()
+
+# 4. Epsilon vs Accuracy Trade-off
+# For this we need to simulate predictions at different epsilon values
+epsilon_range = np.linspace(0, 1, 10)
+accuracy_at_epsilon = []
+
+model.eval()
+for eps in epsilon_range:
+    current_preds = []
+    for i in range(X.size(0)):
+        if random.random() < eps:
+            # Random action
+            pred = random.randint(0, n_classes - 1)
+        else:
+            # Greedy action
+            with torch.no_grad():
+                q_vals = model(X[i])
+                pred = torch.argmax(q_vals).item()
+        current_preds.append(pred)
+    
+    current_acc = accuracy_score(y.numpy(), current_preds)
+    accuracy_at_epsilon.append(current_acc)
+
+plt.figure(figsize=(10, 6))
+plt.plot(epsilon_range, accuracy_at_epsilon, 'bo-')
+plt.title('Accuracy vs Epsilon Trade-off', fontsize=14)
+plt.xlabel('Epsilon (Randomness)')
+plt.ylabel('Accuracy')
+plt.grid(True)
+plt.tight_layout()
+plt.savefig('epsilon_accuracy_tradeoff.png')
+plt.close()
+
+print("\nVisualization results saved as PNG files.")
