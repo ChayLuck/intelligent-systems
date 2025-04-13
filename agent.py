@@ -9,7 +9,7 @@ import csv
 
 # ========== QLearning Agent ================
 class QLearningAgent:
-    def __init__(self, state_size, action_size, lr=0.01, gamma=0.9, epsilon=0.2, epsilon_decay=0.95, min_epsilon=0.01):
+    def __init__(self, state_size, action_size, lr=0.01, gamma=0.9, epsilon=0.2, epsilon_decay=0.75, min_epsilon=0.01):
         self.state_size = state_size
         self.action_size = action_size
         self.lr = lr
@@ -24,12 +24,11 @@ class QLearningAgent:
             return random.randint(0, self.action_size - 1)
         q_values = np.dot(state, self.weights)
         best_action = np.argmax(q_values)
-        
-        # Eğer Random Forest önerisi varsa ve Q-değerleri arasında kararsızlık varsa kullan
+
         if rf_suggestion is not None:
             second_best = np.argsort(q_values)[-2]
             gap = abs(q_values[best_action] - q_values[second_best])
-            if gap < 0.05:  # küçük fark varsa kararsızlık
+            if gap < 0.05:
                 return rf_suggestion
 
         return best_action
@@ -47,7 +46,6 @@ class QLearningAgent:
 
     def decay_epsilon(self):
         self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
-
 
 # ========== Veri Hazırlığı ================
 df = pd.read_csv("extended_dataset_rf.csv")
@@ -72,6 +70,8 @@ action_size = len(np.unique(y))
 agent = QLearningAgent(state_size, action_size)
 
 epochs = 10
+reward_progress = []
+
 for epoch in range(epochs):
     total_reward = 0
     for i in range(len(X) - 1):
@@ -93,6 +93,7 @@ for epoch in range(epochs):
         total_reward += reward
         agent.decay_epsilon()
 
+    reward_progress.append(total_reward)
     print(f"Epoch {epoch + 1}/{epochs} | Total reward: {total_reward}")
 
 # ========== Doğruluk Hesaplama ================
@@ -110,11 +111,9 @@ for i in range(len(X)):
     true_labels.append(true_label)
     agent_preds.append(action)
 
-# Genel doğruluk
 overall_accuracy = accuracy_score(true_labels, agent_preds)
 print(f"\nOverall Accuracy: {overall_accuracy:.4f}")
 
-# Harf bazlı doğruluk hesapla
 letter_accuracies = {}
 for class_index in np.unique(y):
     indices = [i for i, l in enumerate(true_labels) if l == class_index]
@@ -124,8 +123,7 @@ for class_index in np.unique(y):
     letter_accuracies[letter] = letter_accuracy
     print(f"Accuracy for '{letter}': {letter_accuracy:.4f}")
 
-# CSV'ye yaz
-with open("agent_accuracy_results5.csv", mode="w", newline="") as file:
+with open("agent_accuracy_results9.csv", mode="w", newline="") as file:
     writer = csv.writer(file)
     writer.writerow(["Letter", "Accuracy"])
     for letter, acc in sorted(letter_accuracies.items()):
@@ -133,9 +131,9 @@ with open("agent_accuracy_results5.csv", mode="w", newline="") as file:
     writer.writerow([])
     writer.writerow(["Overall Accuracy", overall_accuracy])
 
-print("\nAccuracy results saved to 'agent_accuracy_results5.csv'")
+print("\nAccuracy results saved to 'agent_accuracy_results9.csv'")
 
-# Karışıklık Matrisi çizimi
+# ========== Karışıklık Matrisi ================
 cm = confusion_matrix(true_labels, agent_preds)
 plt.figure(figsize=(18, 14))
 sns.heatmap(cm, annot=False, fmt="d", cmap="Blues", xticklabels=le_letters.classes_, yticklabels=le_letters.classes_)
@@ -143,15 +141,47 @@ plt.xlabel("Predicted")
 plt.ylabel("True")
 plt.title("Confusion Matrix of Ensemble Q-Learning Agent")
 plt.tight_layout()
-plt.savefig("confusion_matrix3.png")
+plt.savefig("confusion_matrix5.png")
 plt.show()
 
-# ========== Hatalı Tahminleri Kaydet ================
-with open("misclassified_letters.csv", "w", newline="") as f:
+# ========== Eğitim Süreci Grafiği ================
+plt.figure(figsize=(10, 6))
+plt.plot(range(1, epochs + 1), reward_progress, marker='o', linestyle='-')
+plt.title("Q-Learning Agent Training Progress")
+plt.xlabel("Epoch")
+plt.ylabel("Total Reward")
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("reward_progress_qlearning.png")
+plt.show()
+
+# ========== Harf Bazlı Doğruluk Grafiği ================
+plt.figure(figsize=(12, 6))
+sorted_items = sorted(letter_accuracies.items())
+letters = [item[0] for item in sorted_items]
+accuracies = [item[1] for item in sorted_items]
+
+bars = plt.bar(letters, accuracies, color="skyblue")
+plt.ylim(0, 1)
+plt.title("Letter-wise Accuracy of Q-Learning Agent")
+plt.xlabel("Letters")
+plt.ylabel("Accuracy")
+plt.grid(axis='y')
+
+for bar in bars:
+    height = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width()/2.0, height + 0.01, f"{height:.2f}", ha='center', va='bottom')
+
+plt.tight_layout()
+plt.savefig("letter_accuracies_qlearning.png")
+plt.show()
+
+# ========== Hatalı Tahminler ================
+with open("misclassified_letters3.csv", "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(["Index", "True Label", "Predicted Label"])
     for idx, (true, pred) in enumerate(zip(true_labels, agent_preds)):
         if true != pred:
             writer.writerow([idx, le_letters.inverse_transform([true])[0], le_letters.inverse_transform([pred])[0]])
 
-print("Misclassified letters saved to 'misclassified_letters2.csv'")
+print("Misclassified letters saved to 'misclassified_letters3.csv'")
