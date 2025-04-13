@@ -48,7 +48,7 @@ class QLearningAgent:
         self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
 
 # ========== Veri Hazırlığı ================
-df = pd.read_csv("extended_dataset_rf.csv")
+df = pd.read_csv("extended_big_output_cv2.csv")
 df = df.drop(columns=["Image"])
 
 le_letters = LabelEncoder()
@@ -123,7 +123,7 @@ for class_index in np.unique(y):
     letter_accuracies[letter] = letter_accuracy
     print(f"Accuracy for '{letter}': {letter_accuracy:.4f}")
 
-with open("agent_accuracy_results9.csv", mode="w", newline="") as file:
+with open("agent_accuracy_results_new2.csv", mode="w", newline="") as file:
     writer = csv.writer(file)
     writer.writerow(["Letter", "Accuracy"])
     for letter, acc in sorted(letter_accuracies.items()):
@@ -131,7 +131,7 @@ with open("agent_accuracy_results9.csv", mode="w", newline="") as file:
     writer.writerow([])
     writer.writerow(["Overall Accuracy", overall_accuracy])
 
-print("\nAccuracy results saved to 'agent_accuracy_results9.csv'")
+print("\nAccuracy results saved to 'agent_accuracy_results_new2.csv'")
 
 # ========== Karışıklık Matrisi ================
 cm = confusion_matrix(true_labels, agent_preds)
@@ -141,7 +141,7 @@ plt.xlabel("Predicted")
 plt.ylabel("True")
 plt.title("Confusion Matrix of Ensemble Q-Learning Agent")
 plt.tight_layout()
-plt.savefig("confusion_matrix5.png")
+plt.savefig("confusion_matrix6.png")
 plt.show()
 
 # ========== Eğitim Süreci Grafiği ================
@@ -152,7 +152,7 @@ plt.xlabel("Epoch")
 plt.ylabel("Total Reward")
 plt.grid(True)
 plt.tight_layout()
-plt.savefig("reward_progress_qlearning.png")
+plt.savefig("reward_progress_qlearning2.png")
 plt.show()
 
 # ========== Harf Bazlı Doğruluk Grafiği ================
@@ -173,15 +173,15 @@ for bar in bars:
     plt.text(bar.get_x() + bar.get_width()/2.0, height + 0.01, f"{height:.2f}", ha='center', va='bottom')
 
 plt.tight_layout()
-plt.savefig("letter_accuracies_qlearning.png")
+plt.savefig("letter_accuracies_qlearning2.png")
 plt.show()
 
 # ========== Hatalı Tahminler ================
-with open("misclassified_letters3.csv", "w", newline="") as f:
+with open("misclassified_letters4.csv", "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(["Index", "True Label", "Predicted Label"])
     for idx, (true, pred) in enumerate(zip(true_labels, agent_preds)):
         if true != pred:
             writer.writerow([idx, le_letters.inverse_transform([true])[0], le_letters.inverse_transform([pred])[0]])
 
-print("Misclassified letters saved to 'misclassified_letters3.csv'")
+print("Misclassified letters saved to 'misclassified_letters4.csv'")
