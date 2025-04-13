@@ -8,13 +8,13 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import accuracy_score
 
 # ====== Parameters ======
-EPOCHS = 75
+EPOCHS = 100
 BATCH_SIZE = 128
 GAMMA = 0.99
-EPSILON_START = 3.0
-EPSILON_END = 0.05
-EPSILON_DECAY = 0.85
-LR = 0.0005
+EPSILON_START = 4.0
+EPSILON_END = 0.1
+EPSILON_DECAY = 0.65
+LR = 0.001
 
 # ====== Dataset Preparation ======
 df = pd.read_csv("extended_big_output_cv5.csv")
@@ -44,12 +44,12 @@ class ImprovedDQN(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(ImprovedDQN, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_dim, 256),
+            nn.Linear(input_dim, 512),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(256, 128),
+            nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Linear(128, output_dim)
+            nn.Linear(256, output_dim)
         )
 
     def forward(self, x):
@@ -89,7 +89,7 @@ for epoch in range(EPOCHS):
             else:
                 action = torch.argmax(q_values[j]).item()
 
-            reward = 10 if action == labels[j].item() else (3 if action == rf_preds[j].item() else -3)
+            reward = 8 if action == labels[j].item() else (1 if action == rf_preds[j].item() else -5)
             total_reward += reward
 
             max_next_q = torch.max(next_q_values[j]).item()
