@@ -125,7 +125,7 @@ for class_index in np.unique(y):
     print(f"Accuracy for '{letter}': {letter_accuracy:.4f}")
 
 # CSV'ye yaz
-with open("agent_accuracy_results4.csv", mode="w", newline="") as file:
+with open("agent_accuracy_results5.csv", mode="w", newline="") as file:
     writer = csv.writer(file)
     writer.writerow(["Letter", "Accuracy"])
     for letter, acc in sorted(letter_accuracies.items()):
@@ -133,7 +133,7 @@ with open("agent_accuracy_results4.csv", mode="w", newline="") as file:
     writer.writerow([])
     writer.writerow(["Overall Accuracy", overall_accuracy])
 
-print("\nAccuracy results saved to 'agent_accuracy_results4.csv'")
+print("\nAccuracy results saved to 'agent_accuracy_results5.csv'")
 
 # Karışıklık Matrisi çizimi
 cm = confusion_matrix(true_labels, agent_preds)
@@ -143,5 +143,15 @@ plt.xlabel("Predicted")
 plt.ylabel("True")
 plt.title("Confusion Matrix of Ensemble Q-Learning Agent")
 plt.tight_layout()
-plt.savefig("confusion_matrix2.png")
+plt.savefig("confusion_matrix3.png")
 plt.show()
+
+# ========== Hatalı Tahminleri Kaydet ================
+with open("misclassified_letters.csv", "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["Index", "True Label", "Predicted Label"])
+    for idx, (true, pred) in enumerate(zip(true_labels, agent_preds)):
+        if true != pred:
+            writer.writerow([idx, le_letters.inverse_transform([true])[0], le_letters.inverse_transform([pred])[0]])
+
+print("Misclassified letters saved to 'misclassified_letters2.csv'")
