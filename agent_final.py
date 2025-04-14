@@ -6,17 +6,18 @@ import torch.optim as optim
 import random
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.metrics import accuracy_score, confusion_matrix
-import seaborn as sns
+from sklearn.model_selection import KFold
+from sklearn.metrics import accuracy_score
 
 # ====== Parameters ======
-EPOCHS = 100
-BATCH_SIZE = 128
-GAMMA = 0.99
+EPOCHS = 100 #how many time
+BATCH_SIZE = 128 #how many data
+GAMMA = 0.99 #how
 EPSILON_START = 4.0
 EPSILON_END = 0.1
 EPSILON_DECAY = 0.65
 LR = 0.001
+FOLDS = 10
 
 # ====== Dataset Preparation ======
 df = pd.read_csv("extended_big_output_cv6.csv")
@@ -57,145 +58,161 @@ class ImprovedDQN(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-# ====== Agent Setup ======
-model = ImprovedDQN(X.shape[1], n_classes)
-target_model = ImprovedDQN(X.shape[1], n_classes)
-target_model.load_state_dict(model.state_dict())
-target_model.eval()
+# ====== K-Fold Cross Validation ======
+kf = KFold(n_splits=FOLDS, shuffle=True, random_state=42)
+fold_accuracies = []
+fold_letter_accuracies = []
+history_all_folds = []
 
-optimizer = optim.Adam(model.parameters(), lr=LR)
-criterion = nn.MSELoss()
-epsilon = EPSILON_START
+for fold, (train_idx, test_idx) in enumerate(kf.split(X)):
+    print(f"\n=== Fold {fold+1}/{FOLDS} ===")
 
-# ====== Tracking metrics for visualization ======
-history = {
-    'epoch': [],
-    'loss': [],
-    'reward': [],
-    'epsilon': []
-}
-
-# ====== Training ======
-for epoch in range(EPOCHS):
-    indices = torch.randperm(X.size(0))
-    total_loss = 0
-    total_reward = 0
-
-    for i in range(0, X.size(0), BATCH_SIZE):
-        batch_idx = indices[i:i+BATCH_SIZE]
-        states = X[batch_idx]
-        labels = y[batch_idx]
-        rf_preds = rf_out[batch_idx]
-
-        q_values = model(states)
-        with torch.no_grad():
-            next_q_values = target_model(states)
-
-        targets = q_values.clone().detach()
-
-        for j in range(states.size(0)):
-            if random.random() < epsilon:
-                action = random.randint(0, n_classes - 1)
-            else:
-                action = torch.argmax(q_values[j]).item()
-
-            reward = 8 if action == labels[j].item() else (1 if action == rf_preds[j].item() else -5)
-            total_reward += reward
-
-            max_next_q = torch.max(next_q_values[j]).item()
-            targets[j, action] = reward + GAMMA * max_next_q
-
-        loss = criterion(q_values, targets)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item()
-
-    if epoch % 5 == 0:
-        target_model.load_state_dict(model.state_dict())
-
-    epsilon = max(EPSILON_END, epsilon * EPSILON_DECAY)
-    print(f"Epoch {epoch+1}/{EPOCHS} - Loss: {total_loss:.4f} - Total Reward: {total_reward}")
+    X_train, y_train, rf_train = X[train_idx], y[train_idx], rf_out[train_idx]
+    X_test, y_test = X[test_idx], y[test_idx]
     
-    # Store metrics for visualization
-    history['epoch'].append(epoch + 1)
-    history['loss'].append(total_loss)
-    history['reward'].append(total_reward)
-    history['epsilon'].append(epsilon)
+    # ====== Agent Setup ======
+    model = ImprovedDQN(X.shape[1], n_classes)
+    target_model = ImprovedDQN(X.shape[1], n_classes)
+    target_model.load_state_dict(model.state_dict())
+    target_model.eval()
 
-# ====== Evaluation ======
-model.eval()
-preds = []
-true_labels = []
+    optimizer = optim.Adam(model.parameters(), lr=LR)
+    criterion = nn.MSELoss()
+    epsilon = EPSILON_START
 
-with torch.no_grad():
-    for i in range(X.size(0)):
-        q_vals = model(X[i])
-        pred = torch.argmax(q_vals).item()
-        preds.append(pred)
-        true_labels.append(y[i].item())
+    history = {
+        'epoch': [],
+        'loss': [],
+        'reward': [],
+        'epsilon': []
+    }
 
-acc = accuracy_score(true_labels, preds)
-print(f"\nFinal Accuracy of Improved DQN Agent: {acc:.4f}")
+    # ====== Training Loop ======
+    for epoch in range(EPOCHS):
+        indices = torch.randperm(X_train.size(0))
+        total_loss = 0
+        total_reward = 0
 
-# Optional: Letter-wise Accuracy
-letter_acc = {}
-true_labels = np.array(true_labels)
-preds = np.array(preds)
-for label in np.unique(true_labels):
-    mask = true_labels == label
-    correct = (preds[mask] == true_labels[mask]).sum()
-    letter_acc[le_letters.inverse_transform([label])[0]] = correct / mask.sum()
+        for i in range(0, X_train.size(0), BATCH_SIZE):
+            batch_idx = indices[i:i+BATCH_SIZE]
+            states = X_train[batch_idx]
+            labels = y_train[batch_idx]
+            rf_preds = rf_train[batch_idx]
 
-print("\nLetter-wise Accuracies:")
-for letter, acc in sorted(letter_acc.items()):
+            q_values = model(states)
+            with torch.no_grad():
+                next_q_values = target_model(states)
+
+            targets = q_values.clone().detach()
+
+            for j in range(states.size(0)):
+                if random.random() < epsilon:
+                    action = random.randint(0, n_classes - 1)
+                else:
+                    action = torch.argmax(q_values[j]).item()
+
+                reward = 8 if action == labels[j].item() else (1 if action == rf_preds[j].item() else -5)
+                total_reward += reward
+
+                max_next_q = torch.max(next_q_values[j]).item()
+                targets[j, action] = reward + GAMMA * max_next_q
+
+            loss = criterion(q_values, targets)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+
+        if epoch % 5 == 0:
+            target_model.load_state_dict(model.state_dict())
+
+        epsilon = max(EPSILON_END, epsilon * EPSILON_DECAY)
+        history['epoch'].append(epoch + 1)
+        history['loss'].append(total_loss)
+        history['reward'].append(total_reward)
+        history['epsilon'].append(epsilon)
+
+        print(f"Epoch {epoch+1}/{EPOCHS} - Loss: {total_loss:.4f} - Total Reward: {total_reward:.2f}")
+
+    # ====== Evaluation ======
+    model.eval()
+    preds = []
+    true_labels = []
+
+    with torch.no_grad():
+        for i in range(X_test.size(0)):
+            q_vals = model(X_test[i])
+            pred = torch.argmax(q_vals).item()
+            preds.append(pred)
+            true_labels.append(y_test[i].item())
+
+    acc = accuracy_score(true_labels, preds)
+    fold_accuracies.append(acc)
+
+    print(f"Fold {fold+1} Accuracy: {acc:.4f}")
+
+    # Letter-wise accuracy
+    letter_acc = {}
+    true_labels = np.array(true_labels)
+    preds = np.array(preds)
+    for label in np.unique(true_labels):
+        mask = true_labels == label
+        correct = (preds[mask] == true_labels[mask]).sum()
+        letter_acc[le_letters.inverse_transform([label])[0]] = correct / mask.sum()
+    fold_letter_accuracies.append(letter_acc)
+    history_all_folds.append(history)
+
+# ====== Overall Results ======
+overall_acc = np.mean(fold_accuracies)
+print(f"\n=== Overall Accuracy from {FOLDS}-Fold CV: {overall_acc:.4f} ===")
+
+# Average letter-wise accuracy
+avg_letter_acc = {}
+for letter in fold_letter_accuracies[0]:
+    avg_letter_acc[letter] = np.mean([f[letter] for f in fold_letter_accuracies])
+
+print("\nAverage Letter-wise Accuracies:")
+for letter, acc in sorted(avg_letter_acc.items()):
     print(f"{letter}: {acc:.4f}")
 
 # ====== Visualizations ======
-plt.style.use('ggplot')
+for metric in ['loss', 'reward', 'epsilon']:
+    plt.figure(figsize=(12, 8))
+    for fold, hist in enumerate(history_all_folds):
+        plt.plot(hist['epoch'], hist[metric], label=f'Fold {fold+1}')
+    plt.title(f'{metric.title()} per Epoch Across Folds')
+    plt.xlabel('Epoch')
+    plt.ylabel(metric.title())
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
-# 1. Training metrics over epochs
-fig, axes = plt.subplots(3, 1, figsize=(12, 15))
-
-# Plot loss
-axes[0].plot(history['epoch'], history['loss'], 'b-')
-axes[0].set_title('Loss Over Training', fontsize=14)
-axes[0].set_xlabel('Epoch')
-axes[0].set_ylabel('Loss')
-axes[0].grid(True)
-
-# Plot reward
-axes[1].plot(history['epoch'], history['reward'], 'g-')
-axes[1].set_title('Total Reward Over Training', fontsize=14)
-axes[1].set_xlabel('Epoch')
-axes[1].set_ylabel('Total Reward')
-axes[1].grid(True)
-
-# Plot epsilon decay
-axes[2].plot(history['epoch'], history['epsilon'], 'r-')
-axes[2].set_title('Epsilon Decay Over Training', fontsize=14)
-axes[2].set_xlabel('Epoch')
-axes[2].set_ylabel('Epsilon')
-axes[2].grid(True)
-
+# Fold Accuracies
+plt.figure(figsize=(10, 6))
+plt.plot(range(1, FOLDS+1), fold_accuracies, 'bo-', label='Fold Accuracy')
+plt.axhline(y=overall_acc, color='r', linestyle='--', label=f'Overall Accuracy: {overall_acc:.4f}')
+plt.title('Accuracy per Fold')
+plt.xlabel('Fold')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.grid(True)
 plt.tight_layout()
-plt.savefig('training_metrics.png')
-plt.close()
+plt.show()
 
-# 2. Letter-wise accuracy visualization
-letters = list(letter_acc.keys())
-accs = list(letter_acc.values())
+# Letter-wise Accuracy
+letters = list(avg_letter_acc.keys())
+accs = list(avg_letter_acc.values())
 
 plt.figure(figsize=(12, 8))
 bars = plt.bar(letters, accs, color='skyblue')
-plt.axhline(y=acc, color='r', linestyle='-', label=f'Overall Accuracy: {acc:.4f}')
-plt.title('Letter-wise Recognition Accuracy', fontsize=16)
+plt.axhline(y=overall_acc, color='r', linestyle='-', label=f'Overall Accuracy: {overall_acc:.4f}')
+plt.title('Average Letter-wise Recognition Accuracy')
 plt.xlabel('Letters')
 plt.ylabel('Accuracy')
 plt.xticks(rotation=45)
 plt.ylim(0, 1.1)
 
-# Add accuracy values on top of bars
 for bar in bars:
     height = bar.get_height()
     plt.text(bar.get_x() + bar.get_width()/2., height + 0.01,
@@ -203,52 +220,4 @@ for bar in bars:
 
 plt.legend()
 plt.tight_layout()
-plt.savefig('letter_accuracy.png')
-plt.close()
-
-# 3. Confusion Matrix
-cm = confusion_matrix(true_labels, preds)
-plt.figure(figsize=(14, 12))
-sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-            xticklabels=le_letters.inverse_transform(np.unique(true_labels)),
-            yticklabels=le_letters.inverse_transform(np.unique(true_labels)))
-plt.title('Confusion Matrix', fontsize=16)
-plt.xlabel('Predicted Label')
-plt.ylabel('True Label')
-plt.tight_layout()
-plt.savefig('confusion_matrix.png')
-plt.close()
-
-# 4. Epsilon vs Accuracy Trade-off
-# For this we need to simulate predictions at different epsilon values
-epsilon_range = np.linspace(0, 1, 10)
-accuracy_at_epsilon = []
-
-model.eval()
-for eps in epsilon_range:
-    current_preds = []
-    for i in range(X.size(0)):
-        if random.random() < eps:
-            # Random action
-            pred = random.randint(0, n_classes - 1)
-        else:
-            # Greedy action
-            with torch.no_grad():
-                q_vals = model(X[i])
-                pred = torch.argmax(q_vals).item()
-        current_preds.append(pred)
-    
-    current_acc = accuracy_score(y.numpy(), current_preds)
-    accuracy_at_epsilon.append(current_acc)
-
-plt.figure(figsize=(10, 6))
-plt.plot(epsilon_range, accuracy_at_epsilon, 'bo-')
-plt.title('Accuracy vs Epsilon Trade-off', fontsize=14)
-plt.xlabel('Epsilon (Randomness)')
-plt.ylabel('Accuracy')
-plt.grid(True)
-plt.tight_layout()
-plt.savefig('epsilon_accuracy_tradeoff.png')
-plt.close()
-
-print("\nVisualization results saved as PNG files.")
+plt.show()
