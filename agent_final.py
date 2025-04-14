@@ -10,22 +10,23 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import accuracy_score
 
 # ====== Parameters ======
+
 EPOCHS = 100 #how many time
 BATCH_SIZE = 128 #how many data
-GAMMA = 0.99 #how
-EPSILON_START = 4.0
-EPSILON_END = 0.1
-EPSILON_DECAY = 0.65
-LR = 0.001
-FOLDS = 10
+GAMMA = 0.99 #how much stick to rewards
+EPSILON_START = 4.0 #randomeness start point, exploration rate
+EPSILON_END = 0.1 #randomeness end point
+EPSILON_DECAY = 0.65 #randomeness will drop over time
+LR = 0.001 #learning rate
+FOLDS = 10 #how many folds for cross validation
 
-# ====== Dataset Preparation ======
+# ====== Dataset Reading and Prep ======
 df = pd.read_csv("extended_big_output_cv6.csv")
 df = df.drop(columns=["Image"])
 
 le_letters = LabelEncoder()
 df["Letters"] = le_letters.fit_transform(df["Letters"])
-
+#Turn these values to encoded numbers so we can work on
 le_rf = LabelEncoder()
 df["RF_Output"] = le_rf.fit_transform(df["RF_Output"])
 
@@ -33,16 +34,18 @@ X = df.drop(columns=["Letters"]).values.astype(np.float32)
 y = df["Letters"].values.astype(int)
 rf_out = df["RF_Output"].values.astype(int)
 
+#Scaler makes the values between 0 and 1, so agent wont confuse the importance
 scaler = StandardScaler()
 X = scaler.fit_transform(X)
 
+#Torch need the data in tensor format (similar to arrays)
 X = torch.tensor(X)
 y = torch.tensor(y)
 rf_out = torch.tensor(rf_out)
 
 n_classes = len(np.unique(y))
 
-# ====== Neural Network (Improved DQN) ======
+# ====== Neural Network (Improved DQN) ====== (Dropout for reduce overfitting),(Bigger values means deeper network)
 class ImprovedDQN(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(ImprovedDQN, self).__init__()
