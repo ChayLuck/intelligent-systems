@@ -13,10 +13,10 @@ from sklearn.metrics import accuracy_score
 
 EPOCHS = 100 #how many time
 BATCH_SIZE = 128 #how many data
-GAMMA = 0.99 #how much stick to rewards
+GAMMA = 0.70 #how much stick to rewards
 EPSILON_START = 4.0 #randomeness start point, exploration rate
-EPSILON_END = 0.1 #randomeness end point
-EPSILON_DECAY = 0.65 #randomeness will drop over time
+EPSILON_END = 0.2 #randomeness end point
+EPSILON_DECAY = 0.85 #randomeness will drop over time
 LR = 0.001 #learning rate
 FOLDS = 10 #how many folds for cross validation
 
@@ -79,8 +79,8 @@ for fold, (train_idx, test_idx) in enumerate(kf.split(X)):
     target_model.load_state_dict(model.state_dict())
     target_model.eval()
 
-    optimizer = optim.Adam(model.parameters(), lr=LR)
-    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=LR) #update the weights for reducing the loss
+    criterion = nn.MSELoss() #this one using regression, calculating the loss
     epsilon = EPSILON_START
 
     history = {
@@ -107,25 +107,28 @@ for fold, (train_idx, test_idx) in enumerate(kf.split(X)):
                 next_q_values = target_model(states)
 
             targets = q_values.clone().detach()
-
+            #if epsilon high it will possibly pick random action
             for j in range(states.size(0)):
                 if random.random() < epsilon:
                     action = random.randint(0, n_classes - 1)
                 else:
                     action = torch.argmax(q_values[j]).item()
 
-                reward = 8 if action == labels[j].item() else (1 if action == rf_preds[j].item() else -5)
+                reward = 8 if action == labels[j].item() else (-3 if action == rf_preds[j].item() else -5)
                 total_reward += reward
 
+                #Bellman equation for Q-learning
                 max_next_q = torch.max(next_q_values[j]).item()
                 targets[j, action] = reward + GAMMA * max_next_q
 
+            #clear the gradients and update the weights
             loss = criterion(q_values, targets)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
 
+        #update the target model every 5 epochs
         if epoch % 5 == 0:
             target_model.load_state_dict(model.state_dict())
 
